@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/feather-icons"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@intelight/geolib@2.0.22/dist/geolib.min.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   <style>
@@ -72,109 +73,230 @@
 
   <script>
     const { h, render } = preact;
-    const { useState, useEffect, useRef, useCallback, useMemo } = preactHooks;
+    const { useState, useEffect, useRef } = preactHooks;
     const html = htm.bind(h);
 
-    function useRainForecast() {
+    function App() {
+      const [stationConfigs, setStationConfigs] = useState(() => {
+        const savedConfigs = localStorage.getItem('stationConfigs');
+        return savedConfigs ? JSON.parse(savedConfigs) : [
+          { stationId: '10389', busNumbers: ['121', '122'] },
+          { stationId: '10161', busNumbers: ['121', '122'] },
+        ];
+      });
+      const [busArrivals, setBusArrivals] = useState({});
+      const [error, setError] = useState(null);
+      const [isLoading, setIsLoading] = useState(true);
+      const [currentTime, setCurrentTime] = useState(Date.now());
+
+      const [theme, setTheme] = useState(() => {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) return savedTheme;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      });
+
+      const [newStationInput, setNewStationInput] = useState('');
+      const [newBusNumberInputs, setNewBusNumberInputs] = useState({});
+      const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+      
+      const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+
       const [rainForecast, setRainForecast] = useState(null);
       const [isRainLoading, setIsRainLoading] = useState(true);
       const [rainError, setRainError] = useState(null);
 
-      const fetchRainForecast = useCallback(() => {
-        setIsRainLoading(true);
-        setRainError(null);
+      const [stopsData, setStopsData] = useState({});
+      const [stationSuggestions, setStationSuggestions] = useState([]);
+      const [selectedStationId, setSelectedStationId] = useState(null);
 
-        const latitude = 1.2896567808191362;
-        const longitude = 103.82687802988048;
+      const [servicesData, setServicesData] = useState({});
+      const [busNumberSuggestions, setBusNumberSuggestions] = useState({});
+      const [stationToBusNumbers, setStationToBusNumbers] = useState({});
 
-        const nowDate = new Date();
+      const [isQRCodeModalOpen, setIsQRCodeModalOpen] = useState(false);
+      const [exportURL, setExportURL] = useState('');
 
-        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=precipitation_probability&timezone=Asia%2FSingapore`)
-          .then(response => response.json())
-          .then(data => {
-            const hourlyTimes = data.hourly.time;
-            const precipitationProb = data.hourly.precipitation_probability;
+      const notificationTimeouts = useRef({});
 
-            const nextTwoHours = [];
+      const [userLocation, setUserLocation] = useState(null);
+      const [locationRequested, setLocationRequested] = useState(false);
 
-            for (let i = 0; i < hourlyTimes.length; i++) {
-              const forecastTime = new Date(hourlyTimes[i]);
-              const diffInMs = forecastTime - nowDate;
-              const diffInHours = diffInMs / (1000 * 60 * 60);
+      function toggleConfigModal() {
+        setIsConfigModalOpen(!isConfigModalOpen);
+      }
+      
+      function toggleInfoModal() {
+        setIsInfoModalOpen(!isInfoModalOpen);
+      }
 
-              if (diffInHours > 0 && diffInHours <= 2) {
-                nextTwoHours.push({
-                  time: forecastTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  precipitationProbability: precipitationProb[i]
-                });
-              }
+      function addStation(e) {
+        e.preventDefault();
+        const stationId = selectedStationId || newStationInput.trim();
+        if (stationId && !stationConfigs.find(s => s.stationId === stationId)) {
+          const updatedConfigs = [...stationConfigs, { stationId: stationId, busNumbers: [] }];
+          setStationConfigs(updatedConfigs);
+          setNewStationInput('');
+          setSelectedStationId(null);
+          setStationSuggestions([]);
+        }
+      }
 
-              if (nextTwoHours.length >= 2) break;
+      function removeStation(stationId) {
+        const updatedConfigs = stationConfigs.filter(s => s.stationId !== stationId);
+        setStationConfigs(updatedConfigs);
+        setNewBusNumberInputs(inputs => {
+          const newInputs = { ...inputs };
+          delete newInputs[stationId];
+          return newInputs;
+        });
+        setBusNumberSuggestions(suggestions => {
+          const newSuggestions = { ...suggestions };
+          delete newSuggestions[stationId];
+          return newSuggestions;
+        });
+      }
+
+      function addBusNumber(e, stationId) {
+        e.preventDefault();
+        const newBusNumber = newBusNumberInputs[stationId];
+        if (newBusNumber && newBusNumber.trim() !== '') {
+          const updatedConfigs = stationConfigs.map(s => {
+            if (s.stationId === stationId && !s.busNumbers.includes(newBusNumber)) {
+              return { ...s, busNumbers: [...s.busNumbers, newBusNumber] };
             }
-
-            if (nextTwoHours.length === 0) {
-              setRainForecast({ expected: false });
-            } else {
-              const rainExpected = nextTwoHours.some(hour => hour.precipitationProbability > 50);
-
-              if (rainExpected) {
-                const rainyHours = nextTwoHours.filter(hour => hour.precipitationProbability > 50);
-                setRainForecast({
-                  expected: true,
-                  details: rainyHours.map(hour => `${hour.time} (${hour.precipitationProbability}% chance)`)
-                });
-              } else {
-                setRainForecast({ expected: false });
-              }
-            }
-
-            setIsRainLoading(false);
-          })
-          .catch(error => {
-            console.error('Error fetching rain forecast:', error);
-            setRainError('Error fetching rain forecast data.');
-            setIsRainLoading(false);
+            return s;
           });
-      }, []);
+          setStationConfigs(updatedConfigs);
+          setNewBusNumberInputs(inputs => ({ ...inputs, [stationId]: '' }));
+          setBusNumberSuggestions(suggestions => ({ ...suggestions, [stationId]: [] }));
+        }
+      }
 
-      useEffect(() => {
-        fetchRainForecast();
-      }, [fetchRainForecast]);
+      function removeBusNumber(stationId, busNo) {
+        const updatedConfigs = stationConfigs.map(s => {
+          if (s.stationId === stationId) {
+            return { ...s, busNumbers: s.busNumbers.filter(no => no !== busNo) };
+          }
+          return s;
+        });
+        setStationConfigs(updatedConfigs);
+      }
 
-      return { rainForecast, isRainLoading, rainError };
-    }
+      function handleBusNumberInputChange(stationId, value) {
+        setNewBusNumberInputs(inputs => ({ ...inputs, [stationId]: value }));
+        if (stationToBusNumbers[stationId]) {
+          const suggestions = stationToBusNumbers[stationId]
+            .filter(busNo => busNo.includes(value))
+            .slice(0, 10);
+          setBusNumberSuggestions(suggestionsObj => ({ ...suggestionsObj, [stationId]: suggestions }));
+        } else {
+          setBusNumberSuggestions(suggestionsObj => ({ ...suggestionsObj, [stationId]: [] }));
+        }
+      }
 
-    function RainAlert({ rainForecast, isRainLoading, rainError }) {
-      return html`
-        <div class="mb-2">
-          ${isRainLoading ? html`
-          ` : rainError ? html`
-            <p class="text-error">${rainError}</p>
-          ` : rainForecast.expected ? html`
-            <div class="alert alert-warning flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Rain is expected at ${rainForecast.details.join(' and ')}.</span>
-            </div>
-          ` : html`
-            <div class="alert flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
-              <span>No rain expected in the next 2 hours.</span>
-            </div>
-          `}
-        </div>
-      `;
-    }
+      function handleBusNumberSelect(stationId, busNo) {
+        setNewBusNumberInputs(inputs => ({ ...inputs, [stationId]: busNo }));
+        setBusNumberSuggestions(suggestionsObj => ({ ...suggestionsObj, [stationId]: [] }));
+      }
 
-    function useBusArrivals(stationConfigs, servicesData) {
-      const [busArrivals, setBusArrivals] = useState({});
-      const [error, setError] = useState(null);
-      const [isLoading, setIsLoading] = useState(true);
+      function handleBusNumberBlur(e, stationId) {
+        // Hide suggestions after a short delay to allow clicks to register
+        setTimeout(() => {
+          setBusNumberSuggestions(suggestionsObj => ({ ...suggestionsObj, [stationId]: [] }));
+        }, 100);
+      }
 
-      const getBusArrivals = useCallback(() => {
+      function handleStationInputChange(value) {
+        setNewStationInput(value);
+        setSelectedStationId(null);
+
+        if (value.length >= 2 && stopsData) {
+          const suggestions = Object.keys(stopsData).map(stationId => {
+            const stop = stopsData[stationId];
+            return {
+              stationId: stationId,
+              name: stop[2],
+              road: stop[3],
+              displayName: `${stop[2]} (${stop[3]}) [${stationId}]`,
+            };
+          }).filter(stop => {
+            const searchValue = value.toLowerCase();
+            return stop.name.toLowerCase().includes(searchValue) || stop.stationId.includes(value);
+          }).slice(0, 10);
+
+          setStationSuggestions(suggestions);
+        } else if (value.length === 0 && userLocation) {
+          computeNearestStations(userLocation.latitude, userLocation.longitude);
+        } else {
+          setStationSuggestions([]);
+        }
+      }
+
+      function handleStationSelect(suggestion) {
+        setNewStationInput(suggestion.displayName);
+        setSelectedStationId(suggestion.stationId);
+        setStationSuggestions([]);
+      }
+
+      function handleStationInputFocus() {
+        if (!locationRequested) {
+          setLocationRequested(true);
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              position => {
+                setUserLocation({
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude
+                });
+                computeNearestStations(position.coords.latitude, position.coords.longitude);
+              },
+              error => {
+                console.error('Error getting location:', error);
+                // Optionally, show a message or proceed without location
+              },
+              { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            );
+          } else {
+            console.error('Geolocation is not supported by this browser.');
+            // Optionally, show a message or proceed without location
+          }
+        } else if (userLocation) {
+          computeNearestStations(userLocation.latitude, userLocation.longitude);
+        }
+      }
+
+      function computeNearestStations(latitude, longitude) {
+        if (!stopsData) return;
+        const stations = Object.keys(stopsData).map(stationId => {
+          const stop = stopsData[stationId];
+          const stopLat = stop[0];
+          const stopLon = stop[1];
+          const distance = geolib.getDistance(
+            { latitude, longitude },
+            { latitude: stopLat, longitude: stopLon }
+          );
+          return {
+            stationId: stationId,
+            name: stop[2],
+            road: stop[3],
+            displayName: `${stop[2]} (${stop[3]}) [${stationId}]`,
+            distance: distance
+          };
+        });
+        stations.sort((a, b) => a.distance - b.distance);
+        const nearestStations = stations.slice(0, 5);
+        setStationSuggestions(nearestStations);
+      }
+
+      function getStationDisplayName(stationId) {
+        if (stopsData && stopsData[stationId]) {
+          const stop = stopsData[stationId];
+          return `${stop[2]} (${stop[3]})`;
+        }
+        return 'Station ' + stationId;
+      }
+
+      function getBusArrivals() {
         setIsLoading(true);
         let fetchPromises = stationConfigs.map(({ stationId, busNumbers }) => {
           return fetch(`https://arrivelah2.busrouter.sg/?id=${stationId}`)
@@ -226,447 +348,9 @@
           setBusArrivals(newBusArrivals);
           setIsLoading(false);
         });
-      }, [stationConfigs]);
-
-      return { busArrivals, error, isLoading, getBusArrivals };
-    }
-
-    function StationConfigModal(props) {
-      const {
-        isConfigModalOpen,
-        toggleConfigModal,
-        stationConfigs,
-        setStationConfigs,
-        newStationInput,
-        setNewStationInput,
-        newBusNumberInputs,
-        setNewBusNumberInputs,
-        stationSuggestions,
-        setStationSuggestions,
-        selectedStationId,
-        setSelectedStationId,
-        stopsData,
-        stationToBusNumbers,
-        servicesData,
-        busNumberSuggestions,
-        setBusNumberSuggestions,
-        handleExportSettings,
-        getStationDisplayName
-      } = props;
-
-      const handleStationInputChange = useCallback((value) => {
-        setNewStationInput(value);
-        setSelectedStationId(null);
-
-        if (value.length >= 2 && stopsData) {
-          const suggestions = Object.keys(stopsData).map(stationId => {
-            const stop = stopsData[stationId];
-            return {
-              stationId: stationId,
-              name: stop[2],
-              road: stop[3],
-              displayName: `${stop[2]} (${stop[3]}) [${stationId}]`,
-            };
-          }).filter(stop => {
-            const searchValue = value.toLowerCase();
-            return stop.name.toLowerCase().includes(searchValue) || stop.stationId.includes(value);
-          }).slice(0, 10);
-
-          setStationSuggestions(suggestions);
-        } else {
-          setStationSuggestions([]);
-        }
-      }, [stopsData]);
-
-      const handleStationSelect = useCallback((suggestion) => {
-        setNewStationInput(suggestion.displayName);
-        setSelectedStationId(suggestion.stationId);
-        setStationSuggestions([]);
-      }, []);
-
-      const addStation = useCallback((e) => {
-        e.preventDefault();
-        const stationId = selectedStationId || newStationInput.trim();
-        if (stationId && !stationConfigs.find(s => s.stationId === stationId)) {
-          const updatedConfigs = [...stationConfigs, { stationId: stationId, busNumbers: [] }];
-          setStationConfigs(updatedConfigs);
-          setNewStationInput('');
-          setSelectedStationId(null);
-          setStationSuggestions([]);
-        }
-      }, [stationConfigs, selectedStationId, newStationInput]);
-
-      const removeStation = useCallback((stationId) => {
-        const updatedConfigs = stationConfigs.filter(s => s.stationId !== stationId);
-        setStationConfigs(updatedConfigs);
-        setNewBusNumberInputs(inputs => {
-          const newInputs = { ...inputs };
-          delete newInputs[stationId];
-          return newInputs;
-        });
-        setBusNumberSuggestions(suggestions => {
-          const newSuggestions = { ...suggestions };
-          delete newSuggestions[stationId];
-          return newSuggestions;
-        });
-      }, [stationConfigs]);
-
-      const handleBusNumberInputChange = useCallback((stationId, value) => {
-        setNewBusNumberInputs(inputs => ({ ...inputs, [stationId]: value }));
-        if (stationToBusNumbers[stationId]) {
-          const suggestions = stationToBusNumbers[stationId]
-            .filter(busNo => busNo.includes(value))
-            .slice(0, 10);
-          setBusNumberSuggestions(suggestionsObj => ({ ...suggestionsObj, [stationId]: suggestions }));
-        } else {
-          setBusNumberSuggestions(suggestionsObj => ({ ...suggestionsObj, [stationId]: [] }));
-        }
-      }, [stationToBusNumbers]);
-
-      const handleBusNumberSelect = useCallback((stationId, busNo) => {
-        setNewBusNumberInputs(inputs => ({ ...inputs, [stationId]: busNo }));
-        setBusNumberSuggestions(suggestionsObj => ({ ...suggestionsObj, [stationId]: [] }));
-      }, []);
-
-      const handleBusNumberBlur = useCallback((e, stationId) => {
-        setTimeout(() => {
-          setBusNumberSuggestions(suggestionsObj => ({ ...suggestionsObj, [stationId]: [] }));
-        }, 100);
-      }, []);
-
-      const addBusNumber = useCallback((e, stationId) => {
-        e.preventDefault();
-        const newBusNumber = newBusNumberInputs[stationId];
-        if (newBusNumber && newBusNumber.trim() !== '') {
-          const updatedConfigs = stationConfigs.map(s => {
-            if (s.stationId === stationId && !s.busNumbers.includes(newBusNumber)) {
-              return { ...s, busNumbers: [...s.busNumbers, newBusNumber] };
-            }
-            return s;
-          });
-          setStationConfigs(updatedConfigs);
-          setNewBusNumberInputs(inputs => ({ ...inputs, [stationId]: '' }));
-          setBusNumberSuggestions(suggestions => ({ ...suggestions, [stationId]: [] }));
-        }
-      }, [newBusNumberInputs, stationConfigs]);
-
-      const removeBusNumber = useCallback((stationId, busNo) => {
-        const updatedConfigs = stationConfigs.map(s => {
-          if (s.stationId === stationId) {
-            return { ...s, busNumbers: s.busNumbers.filter(no => no !== busNo) };
-          }
-          return s;
-        });
-        setStationConfigs(updatedConfigs);
-      }, [stationConfigs]);
-
-      return html`
-        ${isConfigModalOpen && html`
-          <div class="modal modal-open">
-            <div class="modal-box relative w-full h-full max-w-full mx-auto" style="margin-left: 5%; margin-right: 5%; max-width: 90%;">
-              <button class="btn btn-circle absolute right-2 top-2 p-0 bg-transparent border-none" onClick=${toggleConfigModal}>
-                <i data-feather="x" class="w-6 h-6"></i>
-              </button>
-              <div class="flex justify-between items-center mb-2 mt-12">
-                <h3 class="font-bold text-lg flex items-center">
-                  <i data-feather="settings" class="mr-2 w-5 h-5"></i> Configuration
-                </h3>
-                <button class="btn btn-square btn-ghost" onClick=${handleExportSettings}>
-                  <i data-feather="share-2" class="w-5 h-5"></i>
-                </button>
-              </div>
-              <div class="config-panel overflow-y-auto h-full pb-16">
-                <h5 class="font-bold mb-2 flex items-center">
-                  <i data-feather="map-pin" class="mr-2 w-5 h-5"></i> Bus Stations
-                </h5>
-                <form onSubmit=${addStation} class="flex mb-3 relative">
-                  <div class="relative w-full">
-                    <input
-                      type="text"
-                      class="input input-bordered w-full"
-                      placeholder="Enter Station ID or Name"
-                      value=${newStationInput}
-                      onInput=${e => handleStationInputChange(e.target.value)}
-                    />
-                    ${stationSuggestions.length > 0 && html`
-                      <div class="autocomplete-suggestions">
-                        ${stationSuggestions.map(suggestion => html`
-                          <div
-                            class="autocomplete-suggestion"
-                            onClick=${() => handleStationSelect(suggestion)}
-                          >
-                            ${suggestion.displayName}
-                          </div>
-                        `)}
-                      </div>
-                    `}
-                  </div>
-                  <button type="submit" class="btn btn-square btn-ghost ml-2">
-                    <i data-feather="plus" class="w-5 h-5"></i>
-                  </button>
-                </form>
-                ${stationConfigs.map(({ stationId, busNumbers }) => html`
-                  <div class="mb-3 border rounded p-2 border-base-300">
-                    <div class="flex justify-between items-center">
-                      <strong>${getStationDisplayName(stationId)}</strong>
-                      <button class="ml-2" onClick=${() => removeStation(stationId)}>
-                        <i data-feather="trash-2" class="w-5 h-5"></i>
-                      </button>
-                    </div>
-                    <div class="mt-2 flex flex-wrap">
-                      ${busNumbers.map(busNo => html`
-                        <span class="badge badge-secondary mr-2 mb-2 flex items-center">
-                          ${busNo}
-                          <button class="ml-1 p-0" onClick=${() => removeBusNumber(stationId, busNo)}>
-                            <i data-feather="x" class="w-4 h-4"></i>
-                          </button>
-                        </span>
-                      `)}
-                    </div>
-                    <form onSubmit=${e => addBusNumber(e, stationId)} class="flex mt-2 relative">
-                      <div class="relative w-full">
-                        <input
-                          type="text"
-                          class="input input-bordered w-full"
-                          placeholder="Add Bus Number"
-                          value=${newBusNumberInputs[stationId] || ''}
-                          onInput=${e => handleBusNumberInputChange(stationId, e.target.value)}
-                          onFocus=${e => handleBusNumberInputChange(stationId, e.target.value)}
-                          onBlur=${e => handleBusNumberBlur(e, stationId)}
-                        />
-                        ${busNumberSuggestions[stationId] && busNumberSuggestions[stationId].length > 0 && html`
-                          <div class="autocomplete-suggestions">
-                            ${busNumberSuggestions[stationId].map(busNo => html`
-                              <div
-                                class="autocomplete-suggestion"
-                                onMouseDown=${() => handleBusNumberSelect(stationId, busNo)}
-                              >
-                                ${busNo} - ${servicesData[busNo]?.name || ''}
-                              </div>
-                            `)}
-                          </div>
-                        `}
-                      </div>
-                      <button type="submit" class="ml-2 btn btn-square btn-ghost">
-                        <i data-feather="plus" class="w-6 h-6"></i>
-                      </button>
-                    </form>
-                  </div>
-                `)}
-              </div>
-            </div>
-          </div>
-        `}
-      `;
-    }
-
-    function QRCodeModal({ isQRCodeModalOpen, setIsQRCodeModalOpen, exportURL, showToast }) {
-      useEffect(() => {
-        if (isQRCodeModalOpen && exportURL) {
-          const qrcodeContainer = document.getElementById('qrcode');
-          qrcodeContainer.innerHTML = '';
-          new QRCode(qrcodeContainer, {
-            text: exportURL,
-            width: 200,
-            height: 200,
-          });
-          feather.replace();
-        }
-      }, [isQRCodeModalOpen, exportURL]);
-
-      return html`
-        ${isQRCodeModalOpen && html`
-          <div class="modal modal-open">
-            <div class="modal-box relative">
-              <button class="btn btn-sm btn-circle absolute right-2 top-2 p-0 bg-transparent border-none" onClick=${() => setIsQRCodeModalOpen(false)}>
-                <i data-feather="x" class="w-4 h-4"></i>
-              </button>
-              <h3 class="font-bold text-lg mb-4 flex items-center">
-                <i data-feather="share-2" class="mr-2 w-5 h-5"></i> Export Settings
-              </h3>
-              <div id="qrcode" class="flex justify-center"></div>
-              <p class="mt-4 text-sm text-center">Scan this QR code with another device to import settings.</p>
-              <div class="mt-2">
-                <div class="flex">
-                  <input type="text" id="export-url-input" class="input input-bordered w-full" value="${exportURL}" readonly />
-                  <button class="btn btn-square btn-ghost ml-2" onClick=${() => {
-                    navigator.clipboard.writeText(exportURL).then(() => {
-                      showToast('URL copied to clipboard!', 'success');
-                    }, () => {
-                      showToast('Failed to copy URL.', 'error');
-                    });
-                  }}>
-                    <i data-feather="copy" class="w-5 h-5"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        `}
-      `;
-    }
-
-    function InfoModal({ isInfoModalOpen, toggleInfoModal }) {
-      return html`
-        ${isInfoModalOpen && html`
-          <div class="modal modal-open">
-            <div class="modal-box relative">
-              <button class="btn btn-sm btn-circle absolute right-2 top-2 p-0 bg-transparent border-none" onClick=${toggleInfoModal}>
-                <i data-feather="x" class="w-4 h-4"></i>
-              </button>
-              <h3 class="font-bold text-lg mb-4 flex items-center">
-                <i data-feather="info" class="mr-2 w-5 h-5"></i> About SG Bus Arrival
-              </h3>
-              <div class="content">
-                <p class="mb-2">
-                  SG Bus Arrival is a real-time bus tracking application tailored for commuters in Singapore. Unlike general platforms like Google Maps, this app allows you to pin specific bus stop locations near your home or workplace.
-                </p>
-                <p class="mb-2">
-                  By pinning your frequently used bus stops, you can quickly access the app during your daily routine to see the exact time you need to start walking from your home or workplace. This provides a more convenient and streamlined experience, ensuring you never miss your bus.
-                </p>
-                <p>
-                  This app utilizes data from <a href="https://busrouter.sg" class="underline" target="_blank">busrouter.sg</a> and weather information from <a href="https://open-meteo.com" class="underline" target="_blank">Open-Meteo</a>.
-                </p>
-              </div>
-            </div>
-          </div>
-        `}
-      `;
-    }
-
-    function BusArrivalCard({ bus, currentTime, servicesData, getStationDisplayName, handleNotify }) {
-      const remainingTimeMs = bus.arrivalTimestamp - currentTime;
-      let timeString;
-      if (remainingTimeMs > 0) {
-        const totalSeconds = Math.floor(remainingTimeMs / 1000);
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-      } else {
-        timeString = 'Arrived';
       }
 
-      const busRouteName = servicesData[bus.busNo]?.name || '';
-      const truncatedRouteName = busRouteName.length > 30 ? busRouteName.slice(0, 30) + '...' : busRouteName;
-
-      return html`
-        <div class="card mb-2 card-custom border border-base-300">
-          <div class="card-body p-3">
-            <div class="flex justify-between items-center">
-              <div>
-                <h5 class="card-title mb-0">${bus.busNo}</h5>
-                ${truncatedRouteName && html`<p class="text-sm">${truncatedRouteName}</p>`}
-              </div>
-              <div class="flex items-center">
-                <span class="text-sm mr-2">${timeString}</span>
-                <button class="btn btn-ghost btn-sm p-0" onClick=${() => handleNotify(bus)}>
-                  <i data-feather="bell" class="w-5 h-5"></i>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    function BusArrivalTimes({ stationConfigs, busArrivals, servicesData, currentTime, getStationDisplayName, handleNotify }) {
-      return html`
-        ${stationConfigs.map(({ stationId }) => html`
-          <div key=${stationId}>
-            <h2 class="mt-4 mb-2 station-title font-semibold flex items-center">
-              <i data-feather="map-pin" class="mr-2 w-5 h-5"></i>${getStationDisplayName(stationId)}
-            </h2>
-            <div id="bus-arrival-times-${stationId}">
-              ${busArrivals[stationId] && busArrivals[stationId].length > 0 ? busArrivals[stationId].map(bus => html`
-                <${BusArrivalCard}
-                  bus=${bus}
-                  currentTime=${currentTime}
-                  servicesData=${servicesData}
-                  getStationDisplayName=${getStationDisplayName}
-                  handleNotify=${handleNotify}
-                />
-              `) : html`<p>No buses found for station ${stationId}</p>`}
-            </div>
-          </div>
-        `)}
-      `;
-    }
-
-    function App() {
-      const [stationConfigs, setStationConfigs] = useState(() => {
-        const savedConfigs = localStorage.getItem('stationConfigs');
-        return savedConfigs ? JSON.parse(savedConfigs) : [
-          { stationId: '10389', busNumbers: ['121', '122'] },
-          { stationId: '10161', busNumbers: ['121', '122'] },
-        ];
-      });
-      const [currentTime, setCurrentTime] = useState(Date.now());
-
-      const [theme, setTheme] = useState(() => {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme) return savedTheme;
-        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      });
-
-      const [newStationInput, setNewStationInput] = useState('');
-      const [newBusNumberInputs, setNewBusNumberInputs] = useState({});
-      const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-      const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
-
-      const [stopsData, setStopsData] = useState({});
-      const [stationSuggestions, setStationSuggestions] = useState([]);
-      const [selectedStationId, setSelectedStationId] = useState(null);
-
-      const [servicesData, setServicesData] = useState({});
-      const [busNumberSuggestions, setBusNumberSuggestions] = useState({});
-      const [stationToBusNumbers, setStationToBusNumbers] = useState({});
-
-      const [isQRCodeModalOpen, setIsQRCodeModalOpen] = useState(false);
-      const [exportURL, setExportURL] = useState('');
-
-      const notificationTimeouts = useRef({});
-
-      const { rainForecast, isRainLoading, rainError } = useRainForecast();
-
-      const { busArrivals, error, isLoading, getBusArrivals } = useBusArrivals(stationConfigs, servicesData);
-
-      const [errorState, setErrorState] = useState(null);
-
-      const showToast = useCallback((message, type) => {
-        const toastContainer = document.getElementById('toast-container');
-
-        const toast = document.createElement('div');
-        toast.className = `alert alert-${type}`;
-        toast.innerHTML = `
-          <div class="flex items-center">
-            <span>${message}</span>
-          </div>
-        `;
-
-        toastContainer.appendChild(toast);
-
-        setTimeout(() => {
-          toast.remove();
-        }, 3000);
-      }, []);
-
-      const toggleConfigModal = useCallback(() => {
-        setIsConfigModalOpen(!isConfigModalOpen);
-      }, [isConfigModalOpen]);
-
-      const toggleInfoModal = useCallback(() => {
-        setIsInfoModalOpen(!isInfoModalOpen);
-      }, [isInfoModalOpen]);
-
-      const getStationDisplayName = useCallback((stationId) => {
-        if (stopsData && stopsData[stationId]) {
-          const stop = stopsData[stationId];
-          return `${stop[2]} (${stop[3]})`;
-        }
-        return 'Station ' + stationId;
-      }, [stopsData]);
-
-      const toggleTheme = useCallback(() => {
+      function toggleTheme() {
         const newTheme = theme === 'light' ? 'dark' : 'light';
         setTheme(newTheme);
         localStorage.setItem('theme', newTheme);
@@ -681,80 +365,7 @@
           document.documentElement.style.setProperty('--border-color', '#374151');
           document.documentElement.style.setProperty('--hover-bg-color', '#4b5563');
         }
-      }, [theme]);
-
-      const handleNotify = useCallback((bus) => {
-        if (Notification.permission === 'granted') {
-          scheduleNotification(bus);
-        } else if (Notification.permission !== 'denied') {
-          Notification.requestPermission().then(permission => {
-            if (permission === 'granted') {
-              scheduleNotification(bus);
-            } else {
-              showToast('Notifications are blocked. Please enable them in your browser settings.', 'error');
-            }
-          });
-        } else {
-          showToast('Notifications are blocked. Please enable them in your browser settings.', 'error');
-        }
-      }, []);
-
-      const scheduleNotification = useCallback((bus) => {
-        const remainingTimeMs = bus.arrivalTimestamp - Date.now();
-
-        if (remainingTimeMs <= 0) {
-          showToast('Bus is arriving now!', 'info');
-          return;
-        }
-
-        const notificationTime = remainingTimeMs - 30000;
-
-        if (notificationTime <= 0) {
-          showToast('Bus is arriving in less than 30 seconds!', 'info');
-          showNotification(bus);
-          return;
-        }
-
-        if (notificationTimeouts.current[bus.busNo]) {
-          clearTimeout(notificationTimeouts.current[bus.busNo]);
-        }
-
-        notificationTimeouts.current[bus.busNo] = setTimeout(() => {
-          showNotification(bus);
-          delete notificationTimeouts.current[bus.busNo];
-        }, notificationTime);
-
-        showToast(`Notification set for Bus ${bus.busNo} arriving at ${getStationDisplayName(bus.stationId)}`, 'success');
-      }, [getStationDisplayName]);
-
-      const showNotification = useCallback((bus) => {
-        navigator.serviceWorker.getRegistration().then(registration => {
-          if (registration) {
-            registration.showNotification(`Bus ${bus.busNo} is arriving soon!`, {
-              body: `Bus ${bus.busNo} will arrive at ${getStationDisplayName(bus.stationId)} in less than 30 seconds.`,
-              icon: 'bus-icon.png',
-              vibrate: [200, 100, 200],
-              tag: `bus-${bus.busNo}-${bus.stationId}`
-            });
-          }
-        });
-      }, [getStationDisplayName]);
-
-      const handleExportSettings = useCallback(() => {
-        const dataToExport = {
-          stationConfigs,
-          theme,
-        };
-
-        const jsonString = JSON.stringify(dataToExport);
-        const compressedData = LZString.compressToEncodedURIComponent(jsonString);
-
-        const currentURL = window.location.origin + window.location.pathname;
-        const urlWithImport = `${currentURL}#import=${compressedData}`;
-
-        setExportURL(urlWithImport);
-        setIsQRCodeModalOpen(true);
-      }, [stationConfigs, theme]);
+      }
 
       useEffect(() => {
         localStorage.setItem('stationConfigs', JSON.stringify(stationConfigs));
@@ -782,11 +393,13 @@
           setCurrentTime(Date.now());
         }, 1000);
 
+        fetchRainForecast();
+
         return () => {
           clearInterval(interval);
           clearInterval(timer);
         };
-      }, [stationConfigs, getBusArrivals]);
+      }, [stationConfigs]);
 
       useEffect(() => {
         feather.replace();
@@ -848,6 +461,19 @@
       }, [servicesData]);
 
       useEffect(() => {
+        if (isQRCodeModalOpen && exportURL) {
+          const qrcodeContainer = document.getElementById('qrcode');
+          qrcodeContainer.innerHTML = '';
+          new QRCode(qrcodeContainer, {
+            text: exportURL,
+            width: 200,
+            height: 200,
+          });
+          feather.replace();
+        }
+      }, [isQRCodeModalOpen, exportURL]);
+
+      useEffect(() => {
         const hash = window.location.hash;
         if (hash.startsWith('#import=')) {
           const compressedData = hash.substring(8); // remove '#import='
@@ -872,19 +498,182 @@
         }
       }, []);
 
+      function handleNotify(bus) {
+        if (Notification.permission === 'granted') {
+          scheduleNotification(bus);
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+              scheduleNotification(bus);
+            } else {
+              showToast('Notifications are blocked. Please enable them in your browser settings.', 'error');
+            }
+          });
+        } else {
+          showToast('Notifications are blocked. Please enable them in your browser settings.', 'error');
+        }
+      }
+
+      function scheduleNotification(bus) {
+        const remainingTimeMs = bus.arrivalTimestamp - Date.now();
+
+        if (remainingTimeMs <= 0) {
+          showToast('Bus is arriving now!', 'info');
+          return;
+        }
+
+        const notificationTime = remainingTimeMs - 30000;
+
+        if (notificationTime <= 0) {
+          showToast('Bus is arriving in less than 30 seconds!', 'info');
+          showNotification(bus);
+          return;
+        }
+
+        if (notificationTimeouts.current[bus.busNo]) {
+          clearTimeout(notificationTimeouts.current[bus.busNo]);
+        }
+
+        notificationTimeouts.current[bus.busNo] = setTimeout(() => {
+          showNotification(bus);
+          delete notificationTimeouts.current[bus.busNo];
+        }, notificationTime);
+
+        showToast(`Notification set for Bus ${bus.busNo} arriving at ${getStationDisplayName(bus.stationId)}`, 'success');
+      }
+
+      function showNotification(bus) {
+        navigator.serviceWorker.getRegistration().then(registration => {
+          if (registration) {
+            registration.showNotification(`Bus ${bus.busNo} is arriving soon!`, {
+              body: `Bus ${bus.busNo} will arrive at ${getStationDisplayName(bus.stationId)} in less than 30 seconds.`,
+              icon: 'bus-icon.png',
+              vibrate: [200, 100, 200],
+              tag: `bus-${bus.busNo}-${bus.stationId}`
+            });
+          }
+        });
+      }
+
+      function showToast(message, type) {
+        const toastContainer = document.getElementById('toast-container');
+
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type}`;
+        toast.innerHTML = `
+          <div class="flex items-center">
+            <span>${message}</span>
+          </div>
+        `;
+
+        toastContainer.appendChild(toast);
+
+        setTimeout(() => {
+          toast.remove();
+        }, 3000);
+      }
+
+      function fetchRainForecast() {
+        setIsRainLoading(true);
+        setRainError(null);
+
+        const latitude = 1.2896567808191362;
+        const longitude = 103.82687802988048;
+
+        const nowDate = new Date();
+
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=precipitation_probability&timezone=Asia%2FSingapore`)
+          .then(response => response.json())
+          .then(data => {
+            const hourlyTimes = data.hourly.time;
+            const precipitationProb = data.hourly.precipitation_probability;
+
+            const nextTwoHours = [];
+
+            for (let i = 0; i < hourlyTimes.length; i++) {
+              const forecastTime = new Date(hourlyTimes[i]);
+              const diffInMs = forecastTime - nowDate;
+              const diffInHours = diffInMs / (1000 * 60 * 60);
+
+              if (diffInHours > 0 && diffInHours <= 2) {
+                nextTwoHours.push({
+                  time: forecastTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  precipitationProbability: precipitationProb[i]
+                });
+              }
+
+              if (nextTwoHours.length >= 2) break;
+            }
+
+            if (nextTwoHours.length === 0) {
+              setRainForecast({ expected: false });
+            } else {
+              const rainExpected = nextTwoHours.some(hour => hour.precipitationProbability > 50);
+
+              if (rainExpected) {
+                const rainyHours = nextTwoHours.filter(hour => hour.precipitationProbability > 50);
+                setRainForecast({
+                  expected: true,
+                  details: rainyHours.map(hour => `${hour.time} (${hour.precipitationProbability}% chance)`)
+                });
+              } else {
+                setRainForecast({ expected: false });
+              }
+            }
+
+            setIsRainLoading(false);
+          })
+          .catch(error => {
+            console.error('Error fetching rain forecast:', error);
+            setRainError('Error fetching rain forecast data.');
+            setIsRainLoading(false);
+          });
+      }
+
+      function handleExportSettings() {
+        const dataToExport = {
+          stationConfigs,
+          theme,
+        };
+
+        const jsonString = JSON.stringify(dataToExport);
+        const compressedData = LZString.compressToEncodedURIComponent(jsonString);
+
+        const currentURL = window.location.origin + window.location.pathname;
+        const urlWithImport = `${currentURL}#import=${compressedData}`;
+
+        setExportURL(urlWithImport);
+        setIsQRCodeModalOpen(true);
+      }
+
       return html`
         <div class="max-w-xl w-full mx-auto p-4 flex flex-col min-h-full">
           <h1 class="text-center text-2xl font-bold mb-3 flex justify-center items-center">
             <i data-feather="heart" class="mr-2 w-6 h-6"></i>
             SG Bus Arrival
           </h1>
-          ${errorState && html`<p class="text-error">${errorState}</p>`}
+          ${error && html`<p class="text-error">${error}</p>`}
 
-          <${RainAlert}
-            rainForecast=${rainForecast}
-            isRainLoading=${isRainLoading}
-            rainError=${rainError}
-          />
+          <div class="mb-2">
+            ${isRainLoading ? html`
+            ` : rainError ? html`
+              <p class="text-error">${rainError}</p>
+            ` : rainForecast.expected ? html`
+              <div class="alert alert-warning flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Rain is expected at ${rainForecast.details.join(' and ')}.</span>
+              </div>
+            ` : html`
+              <div class="alert flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>No rain expected in the next 2 hours.</span>
+              </div>
+            `}
+          </div>
 
           <div class="flex justify-between items-center mb-3">
             <span class="refresh-btn" onClick=${getBusArrivals}>
@@ -903,54 +692,204 @@
             </div>
           </div>
 
-          <${StationConfigModal}
-            isConfigModalOpen=${isConfigModalOpen}
-            toggleConfigModal=${toggleConfigModal}
-            stationConfigs=${stationConfigs}
-            setStationConfigs=${setStationConfigs}
-            newStationInput=${newStationInput}
-            setNewStationInput=${setNewStationInput}
-            newBusNumberInputs=${newBusNumberInputs}
-            setNewBusNumberInputs=${setNewBusNumberInputs}
-            stationSuggestions=${stationSuggestions}
-            setStationSuggestions=${setStationSuggestions}
-            selectedStationId=${selectedStationId}
-            setSelectedStationId=${setSelectedStationId}
-            stopsData=${stopsData}
-            stationToBusNumbers=${stationToBusNumbers}
-            servicesData=${servicesData}
-            busNumberSuggestions=${busNumberSuggestions}
-            setBusNumberSuggestions=${setBusNumberSuggestions}
-            handleExportSettings=${handleExportSettings}
-            getStationDisplayName=${getStationDisplayName}
-          />
+          ${isConfigModalOpen && html`
+            <div class="modal modal-open">
+              <div class="modal-box relative w-full h-full max-w-full mx-auto" style="margin-left: 5%; margin-right: 5%; max-width: 90%;">
+                <button class="btn btn-circle absolute right-2 top-2 p-0 bg-transparent border-none" onClick=${toggleConfigModal}>
+                  <i data-feather="x" class="w-6 h-6"></i>
+                </button>
+                <div class="flex justify-between items-center mb-2 mt-12">
+                  <h3 class="font-bold text-lg flex items-center">
+                    <i data-feather="settings" class="mr-2 w-5 h-5"></i> Configuration
+                  </h3>
+                  <button class="btn btn-square btn-ghost" onClick=${handleExportSettings}>
+                    <i data-feather="share-2" class="w-5 h-5"></i>
+                  </button>
+                </div>
+                <div class="config-panel overflow-y-auto h-full pb-16">
+                  <h5 class="font-bold mb-2 flex items-center">
+                    <i data-feather="map-pin" class="mr-2 w-5 h-5"></i> Bus Stations
+                  </h5>
+                  <form onSubmit=${addStation} class="flex mb-3 relative">
+                    <div class="relative w-full">
+                      <input
+                        type="text"
+                        class="input input-bordered w-full"
+                        placeholder="Enter Station ID or Name"
+                        value=${newStationInput}
+                        onInput=${e => handleStationInputChange(e.target.value)}
+                        onFocus=${handleStationInputFocus}
+                      />
+                      ${stationSuggestions.length > 0 && html`
+                        <div class="autocomplete-suggestions">
+                          ${stationSuggestions.map(suggestion => html`
+                            <div
+                              class="autocomplete-suggestion"
+                              onClick=${() => handleStationSelect(suggestion)}
+                            >
+                              ${suggestion.displayName}
+                            </div>
+                          `)}
+                        </div>
+                      `}
+                    </div>
+                    <button type="submit" class="btn btn-square btn-ghost ml-2">
+                      <i data-feather="plus" class="w-5 h-5"></i>
+                    </button>
+                  </form>
+                  ${stationConfigs.map(({ stationId, busNumbers }) => html`
+                    <div class="mb-3 border rounded p-2 border-base-300">
+                      <div class="flex justify-between items-center">
+                        <strong>${getStationDisplayName(stationId)}</strong>
+                        <button class="ml-2" onClick=${() => removeStation(stationId)}>
+                          <i data-feather="trash-2" class="w-5 h-5"></i>
+                        </button>
+                      </div>
+                      <div class="mt-2 flex flex-wrap">
+                        ${busNumbers.map(busNo => html`
+                          <span class="badge badge-secondary mr-2 mb-2 flex items-center">
+                            ${busNo}
+                            <button class="ml-1 p-0" onClick=${() => removeBusNumber(stationId, busNo)}>
+                              <i data-feather="x" class="w-4 h-4"></i>
+                            </button>
+                          </span>
+                        `)}
+                      </div>
+                      <form onSubmit=${e => addBusNumber(e, stationId)} class="flex mt-2 relative">
+                        <div class="relative w-full">
+                          <input
+                            type="text"
+                            class="input input-bordered w-full"
+                            placeholder="Add Bus Number"
+                            value=${newBusNumberInputs[stationId] || ''}
+                            onInput=${e => handleBusNumberInputChange(stationId, e.target.value)}
+                            onFocus=${e => handleBusNumberInputChange(stationId, e.target.value)}
+                            onBlur=${e => handleBusNumberBlur(e, stationId)}
+                          />
+                          ${busNumberSuggestions[stationId] && busNumberSuggestions[stationId].length > 0 && html`
+                            <div class="autocomplete-suggestions">
+                              ${busNumberSuggestions[stationId].map(busNo => html`
+                                <div
+                                  class="autocomplete-suggestion"
+                                  onMouseDown=${() => handleBusNumberSelect(stationId, busNo)}
+                                >
+                                  ${busNo} - ${servicesData[busNo]?.name || ''}
+                                </div>
+                              `)}
+                            </div>
+                          `}
+                        </div>
+                        <button type="submit" class="ml-2 btn btn-square btn-ghost">
+                          <i data-feather="plus" class="w-6 h-6"></i>
+                        </button>
+                      </form>
+                    </div>
+                  `)}
+                </div>
+              </div>
+            </div>
+          `}
 
-          <${QRCodeModal}
-            isQRCodeModalOpen=${isQRCodeModalOpen}
-            setIsQRCodeModalOpen=${setIsQRCodeModalOpen}
-            exportURL=${exportURL}
-            showToast=${showToast}
-          />
+          ${isQRCodeModalOpen && html`
+            <div class="modal modal-open">
+              <div class="modal-box relative">
+                <button class="btn btn-sm btn-circle absolute right-2 top-2 p-0 bg-transparent border-none" onClick=${() => setIsQRCodeModalOpen(false)}>
+                  <i data-feather="x" class="w-4 h-4"></i>
+                </button>
+                <h3 class="font-bold text-lg mb-4 flex items-center">
+                  <i data-feather="share-2" class="mr-2 w-5 h-5"></i> Export Settings
+                </h3>
+                <div id="qrcode" class="flex justify-center"></div>
+                <p class="mt-4 text-sm text-center">Scan this QR code with another device to import settings.</p>
+                <div class="mt-2">
+                  <div class="flex">
+                    <input type="text" id="export-url-input" class="input input-bordered w-full" value="${exportURL}" readonly />
+                    <button class="btn btn-square btn-ghost ml-2" onClick=${() => {
+                      navigator.clipboard.writeText(exportURL).then(() => {
+                        showToast('URL copied to clipboard!', 'success');
+                      }, () => {
+                        showToast('Failed to copy URL.', 'error');
+                      });
+                    }}>
+                      <i data-feather="copy" class="w-5 h-5"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `}
 
-          <${InfoModal}
-            isInfoModalOpen=${isInfoModalOpen}
-            toggleInfoModal=${toggleInfoModal}
-          />
+          ${isInfoModalOpen && html`
+            <div class="modal modal-open">
+              <div class="modal-box relative">
+                <button class="btn btn-sm btn-circle absolute right-2 top-2 p-0 bg-transparent border-none" onClick=${toggleInfoModal}>
+                  <i data-feather="x" class="w-4 h-4"></i>
+                </button>
+                <h3 class="font-bold text-lg mb-4 flex items-center">
+                  <i data-feather="info" class="mr-2 w-5 h-5"></i> About SG Bus Arrival
+                </h3>
+                <div class="content">
+                  <p class="mb-2">
+                    SG Bus Arrival is a real-time bus tracking application tailored for commuters in Singapore. Unlike general platforms like Google Maps, this app allows you to pin specific bus stop locations near your home or workplace.
+                  </p>
+                  <p class="mb-2">
+                    By pinning your frequently used bus stops, you can quickly access the app during your daily routine to see the exact time you need to start walking from your home or workplace. This provides a more convenient and streamlined experience, ensuring you never miss your bus.
+                  </p>
+                  <p>
+                    This app utilizes data from <a href="https://busrouter.sg" class="underline" target="_blank">busrouter.sg</a> and weather information from <a href="https://open-meteo.com" class="underline" target="_blank">Open-Meteo</a>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          `}
 
           ${isLoading ? html`
             <div class="spinner">
               <i data-feather="loader" class="animate-spin w-8 h-8"></i>
             </div>
-          ` : html`
-            <${BusArrivalTimes}
-              stationConfigs=${stationConfigs}
-              busArrivals=${busArrivals}
-              servicesData=${servicesData}
-              currentTime=${currentTime}
-              getStationDisplayName=${getStationDisplayName}
-              handleNotify=${handleNotify}
-            />
-          `}
+          ` : stationConfigs.map(({ stationId }) => html`
+            <div key=${stationId}>
+              <h2 class="mt-4 mb-2 station-title font-semibold flex items-center">
+                <i data-feather="map-pin" class="mr-2 w-5 h-5"></i>${getStationDisplayName(stationId)}
+              </h2>
+              <div id="bus-arrival-times-${stationId}">
+                ${busArrivals[stationId] && busArrivals[stationId].length > 0 ? busArrivals[stationId].map(bus => {
+                  const remainingTimeMs = bus.arrivalTimestamp - currentTime;
+                  let timeString;
+                  if (remainingTimeMs > 0) {
+                    const totalSeconds = Math.floor(remainingTimeMs / 1000);
+                    const minutes = Math.floor(totalSeconds / 60);
+                    const seconds = totalSeconds % 60;
+                    timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                  } else {
+                    timeString = 'Arrived';
+                  }
+
+                  const busRouteName = servicesData[bus.busNo]?.name || '';
+                  const truncatedRouteName = busRouteName.length > 30 ? busRouteName.slice(0, 30) + '...' : busRouteName;
+
+                  return html`
+                    <div class="card mb-2 card-custom border border-base-300">
+                      <div class="card-body p-3">
+                        <div class="flex justify-between items-center">
+                          <div>
+                            <h5 class="card-title mb-0">${bus.busNo}</h5>
+                            ${truncatedRouteName && html`<p class="text-sm">${truncatedRouteName}</p>`}
+                          </div>
+                          <div class="flex items-center">
+                            <span class="text-sm mr-2">${timeString}</span>
+                            <button class="btn btn-ghost btn-sm p-0" onClick=${() => handleNotify(bus)}>
+                              <i data-feather="bell" class="w-5 h-5"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }) : html`<p>No buses found for station ${stationId}</p>`}
+              </div>
+            </div>
+          `)}
 
           <footer class="text-center mt-4 text-sm text-gray-500 dark:text-gray-400">
             SG Bus Arrival by <a href="https://tuhuynh.com" class="underline">Tu Huynh</a>, bus data by <a href="https://busrouter.sg" class="underline">busrouter.sg</a>
@@ -960,6 +899,12 @@
     }
 
     render(html`<${App} />`, document.getElementById('app'));
+  </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
   </script>
 </body>
 </html>
