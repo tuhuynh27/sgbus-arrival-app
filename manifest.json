@@ -1,0 +1,20 @@
+{
+    "name": "SG Bus Arrival",
+    "short_name": "Bus Arrival",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#000000",
+    "theme_color": "#1D232A",
+    "icons": [
+      {
+        "src": "/bus.png",
+        "sizes": "192x192",
+        "type": "image/png"
+      },
+      {
+        "src": "/bus.png",
+        "sizes": "512x512",
+        "type": "image/png"
+      }
+    ]
+}
