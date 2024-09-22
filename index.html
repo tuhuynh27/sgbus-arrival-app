@@ -265,6 +265,13 @@
         }
       }
 
+      function handleStationInputBlur() {
+        // Hide suggestions after a short delay to allow selection
+        setTimeout(() => {
+          setStationSuggestions([]);
+        }, 100);
+      }
+
       function computeNearestStations(latitude, longitude) {
         if (!stopsData) return;
         const stations = Object.keys(stopsData).map(stationId => {
@@ -286,6 +293,24 @@
         stations.sort((a, b) => a.distance - b.distance);
         const nearestStations = stations.slice(0, 5);
         setStationSuggestions(nearestStations);
+      }
+
+      function haversineDistance(lat1, lon1, lat2, lon2) {
+        function toRad(x) {
+          return x * Math.PI / 180;
+        }
+
+        const R = 6371; // Earth's radius in km
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const lat1Rad = toRad(lat1);
+        const lat2Rad = toRad(lat2);
+
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1Rad) * Math.cos(lat2Rad);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const d = R * c;
+        return d; // distance in km
       }
 
       function getStationDisplayName(stationId) {
@@ -404,16 +429,6 @@
       useEffect(() => {
         feather.replace();
       });
-
-      useEffect(() => {
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('sw.js').then(registration => {
-            console.log('Service Worker registered with scope:', registration.scope);
-          }).catch(error => {
-            console.error('Service Worker registration failed:', error);
-          });
-        }
-      }, []);
 
       useEffect(() => {
         fetch('/stops.json')
@@ -661,7 +676,7 @@
             ` : rainForecast.expected ? html`
               <div class="alert alert-warning flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current flex-shrink-0 h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span>Rain is expected at ${rainForecast.details.join(' and ')}.</span>
               </div>
@@ -719,13 +734,14 @@
                         value=${newStationInput}
                         onInput=${e => handleStationInputChange(e.target.value)}
                         onFocus=${handleStationInputFocus}
+                        onBlur=${handleStationInputBlur}
                       />
                       ${stationSuggestions.length > 0 && html`
                         <div class="autocomplete-suggestions">
                           ${stationSuggestions.map(suggestion => html`
                             <div
                               class="autocomplete-suggestion"
-                              onClick=${() => handleStationSelect(suggestion)}
+                              onMouseDown=${() => handleStationSelect(suggestion)}
                             >
                               ${suggestion.displayName}
                             </div>
@@ -899,12 +915,6 @@
     }
 
     render(html`<${App} />`, document.getElementById('app'));
-  </script>
-
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js');
-    }
   </script>
 </body>
 </html>
