@@ -64,6 +64,16 @@
       border-color: transparent;
     }
   </style>
+  <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link rel="dns-prefetch" href="https://unpkg.com">
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <link rel="preload" href="/stops.json" as="fetch" crossorigin>
+  <link rel="preload" href="/services.json" as="fetch" crossorigin>
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 </head>
 <body class="bg-base-100 min-h-screen flex flex-col">
   <div id="toast-container" class="toast toast-top toast-center"></div>
@@ -814,6 +824,20 @@
           showToast('Failed to grant notification permission. Please try again.', 'error');
         }
       }
+
+      useEffect(() => {
+        // Listen for messages from service worker
+        navigator.serviceWorker.addEventListener('message', event => {
+          if (event.data.type === 'APP_UPDATED') {
+            showToast('App has been updated to the latest version!', 'success');
+            // Optionally, you can add a reload button
+            const shouldReload = confirm('A new version is available. Would you like to reload now?');
+            if (shouldReload) {
+              window.location.reload();
+            }
+          }
+        });
+      }, []);
 
       return html`
         <div class="max-w-xl w-full mx-auto p-4 flex flex-col min-h-full">
