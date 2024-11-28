@@ -161,7 +161,7 @@
     }
 
     .tab-page {
-      height: calc(100vh - 5rem - env(safe-area-inset-bottom));
+      height: calc(100vh - 5rem);
       padding: 1rem;
       overflow-y: auto;
       padding-bottom: calc(1rem + env(safe-area-inset-bottom));
@@ -172,6 +172,7 @@
       transform: translateX(100%);
       transition: transform 0.2s ease-out, opacity 0.2s ease-out;
       visibility: hidden;
+      -webkit-overflow-scrolling: touch;
     }
 
     .tab-page.active {
@@ -1027,6 +1028,26 @@
         setSlideDirection(newIndex > currentIndex ? 'right' : 'left');
         setActiveTab(newTab);
       }
+
+      useEffect(() => {
+        // Reset scroll position when switching tabs
+        const tabPage = document.querySelector('.tab-page.active');
+        if (tabPage) {
+          tabPage.scrollTop = 0;
+        }
+        
+        // Force a reflow to ensure proper height calculation
+        if (activeTab === 'home') {
+          requestAnimationFrame(() => {
+            const tabPage = document.querySelector('.tab-page.active');
+            if (tabPage) {
+              tabPage.style.display = 'none';
+              tabPage.offsetHeight; // Force reflow
+              tabPage.style.display = '';
+            }
+          });
+        }
+      }, [activeTab]);
 
       return html`
         <div class="page-container">
