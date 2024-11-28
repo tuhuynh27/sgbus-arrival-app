@@ -999,9 +999,22 @@
         <div class="page-container">
           <!-- Home Tab -->
           <div class="tab-page ${activeTab === 'home' ? 'active' : ''}">
-            <h1 class="text-center text-2xl font-bold mb-3 flex justify-center items-center">
-              <i data-feather="heart" class="mr-2 w-6 h-6"></i>
-              SG Bus Arrival
+            <h1 class="text-center text-2xl font-bold mb-3 flex justify-between items-center">
+              <div class="flex items-center">
+                <i data-feather="heart" class="mr-2 w-6 h-6"></i>
+                SG Bus Arrival
+              </div>
+              <button 
+                class="btn btn-ghost btn-circle" 
+                onClick=${() => {
+                  setIsLoading(true);
+                  getBusArrivals();
+                  fetchRainForecast();
+                }}
+                disabled=${isLoading}
+              >
+                <i data-feather="refresh-cw" class=${isLoading ? 'animate-spin' : ''} />
+              </button>
             </h1>
             
             ${isOffline && html`
@@ -1131,13 +1144,27 @@
           <div class="tab-page ${activeTab === 'settings' ? 'active' : ''}">
             <h2 class="text-2xl font-bold mb-4">Settings</h2>
             <div class="config-panel">
-              <!-- Add Theme Toggle Section -->
+              <!-- Add Export Settings Button -->
+              <div class="mb-6">
+                <h5 class="font-bold mb-2 flex items-center">
+                  <i data-feather="share-2" class="mr-2 w-5 h-5"></i> Data Sync
+                </h5>
+                <button 
+                  class="btn gap-2"
+                  onClick=${handleExportSettings}
+                >
+                  <i data-feather="share" class="w-5 h-5"></i>
+                  Export Settings
+                </button>
+              </div>
+
+              <!-- Theme Toggle Section -->
               <div class="mb-6">
                 <h5 class="font-bold mb-2 flex items-center">
                   <i data-feather="sun" class="mr-2 w-5 h-5"></i> Theme
                 </h5>
                 <button 
-                  class="btn btn-outline gap-2"
+                  class="btn gap-2"
                   onClick=${toggleTheme}
                 >
                   <i data-feather=${theme === 'light' ? 'moon' : 'sun'} class="w-5 h-5"></i>
