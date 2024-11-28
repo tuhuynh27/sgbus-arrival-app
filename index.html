@@ -207,6 +207,55 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
     }
+
+    /* Toast styles */
+    #toast-container {
+      position: fixed;
+      top: env(safe-area-inset-top, 0);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 480px;
+      padding: 1rem;
+      z-index: 1000; /* Higher z-index to appear above other elements */
+      pointer-events: none; /* Allow clicking through the container */
+    }
+
+    .toast-alert {
+      margin-bottom: 0.5rem;
+      animation: slideIn 0.3s ease-out, fadeOut 0.3s ease-out 2.7s;
+      pointer-events: auto; /* Re-enable pointer events for the actual toast */
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateY(-100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadeOut {
+      from {
+        opacity: 1;
+      }
+      to {
+        opacity: 0;
+      }
+    }
+
+    /* Make sure the page container doesn't overlap toasts */
+    .page-container {
+      z-index: 1;
+    }
+
+    /* Ensure modals appear above toasts */
+    .modal {
+      z-index: 1100;
+    }
   </style>
   <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
@@ -223,7 +272,7 @@
   <div class="loading-screen" id="loading-screen">
     <i data-feather="heart" class="mr-2"></i> SG Bus Arrival
   </div>
-  <div id="toast-container" class="toast toast-top toast-center"></div>
+  <div id="toast-container"></div>
 
   <div class="mx-auto w-full max-w-[480px] relative">
     <div id="app"></div>
@@ -892,7 +941,7 @@
         const toastContainer = document.getElementById('toast-container');
 
         const toast = document.createElement('div');
-        toast.className = `alert alert-${type}`;
+        toast.className = `alert alert-${type} toast-alert`;
         toast.innerHTML = `
           <div class="flex items-center">
             <span>${message}</span>
