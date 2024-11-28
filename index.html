@@ -163,13 +163,34 @@
     .tab-page {
       height: calc(100vh - 5rem - env(safe-area-inset-bottom));
       padding: 1rem;
-      display: none;
       overflow-y: auto;
       padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+      position: absolute;
+      width: 100%;
+      left: 0;
+      opacity: 0;
+      transform: translateX(100%);
+      transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+      visibility: hidden;
     }
 
     .tab-page.active {
-      display: block;
+      opacity: 1;
+      transform: translateX(0);
+      visibility: visible;
+    }
+
+    .tab-page.slide-left {
+      transform: translateX(-100%);
+    }
+
+    .tab-page.slide-right {
+      transform: translateX(100%);
+    }
+
+    .tab-page.previous {
+      visibility: visible;
+      opacity: 0;
     }
 
     /* Safe area padding for iOS - update these */
@@ -331,6 +352,8 @@
       const [locationRequested, setLocationRequested] = useState(false);
 
       const [activeTab, setActiveTab] = useState('home');
+      const [previousTab, setPreviousTab] = useState(null);
+      const [slideDirection, setSlideDirection] = useState(null);
 
       function toggleConfigModal() {
         setIsConfigModalOpen(!isConfigModalOpen);
@@ -995,10 +1018,28 @@
         });
       }, []);
 
+      function handleTabChange(newTab) {
+        const tabOrder = ['home', 'settings', 'notifications', 'info'];
+        const currentIndex = tabOrder.indexOf(activeTab);
+        const newIndex = tabOrder.indexOf(newTab);
+        
+        setPreviousTab(activeTab);
+        setSlideDirection(newIndex > currentIndex ? 'right' : 'left');
+        setActiveTab(newTab);
+      }
+
       return html`
         <div class="page-container">
           <!-- Home Tab -->
-          <div class="tab-page ${activeTab === 'home' ? 'active' : ''}">
+          <div 
+            class=${`tab-page ${
+              activeTab === 'home' ? 'active' : ''
+            } ${
+              previousTab === 'home' ? 'previous' : ''
+            } ${
+              slideDirection && activeTab !== 'home' ? `slide-${slideDirection === 'right' ? 'left' : 'right'}` : ''
+            }`}
+          >
             <h1 class="text-center text-2xl font-bold mb-3 flex justify-between items-center">
               <div class="flex items-center">
                 <i data-feather="heart" class="mr-2 w-6 h-6"></i>
@@ -1141,7 +1182,15 @@
           </div>
 
           <!-- Settings Tab -->
-          <div class="tab-page ${activeTab === 'settings' ? 'active' : ''}">
+          <div 
+            class=${`tab-page ${
+              activeTab === 'settings' ? 'active' : ''
+            } ${
+              previousTab === 'settings' ? 'previous' : ''
+            } ${
+              slideDirection && activeTab !== 'settings' ? `slide-${slideDirection === 'right' ? 'left' : 'right'}` : ''
+            }`}
+          >
             <h2 class="text-2xl font-bold mb-4">Settings</h2>
             <div class="config-panel">
               <!-- Add Export Settings Button -->
@@ -1255,7 +1304,15 @@
           </div>
 
           <!-- Info Tab -->
-          <div class="tab-page ${activeTab === 'info' ? 'active' : ''}">
+          <div 
+            class=${`tab-page ${
+              activeTab === 'info' ? 'active' : ''
+            } ${
+              previousTab === 'info' ? 'previous' : ''
+            } ${
+              slideDirection && activeTab !== 'info' ? `slide-${slideDirection === 'right' ? 'left' : 'right'}` : ''
+            }`}
+          >
             <h2 class="text-2xl font-bold mb-4">About</h2>
             <div class="content">
               <p class="mb-2">
@@ -1271,7 +1328,15 @@
           </div>
 
           <!-- Notifications Tab -->
-          <div class="tab-page ${activeTab === 'notifications' ? 'active' : ''}">
+          <div 
+            class=${`tab-page ${
+              activeTab === 'notifications' ? 'active' : ''
+            } ${
+              previousTab === 'notifications' ? 'previous' : ''
+            } ${
+              slideDirection && activeTab !== 'notifications' ? `slide-${slideDirection === 'right' ? 'left' : 'right'}` : ''
+            }`}
+          >
             <h2 class="text-2xl font-bold mb-4">Notifications</h2>
             <button class="btn" onClick=${grantPermissionForNotification}>
               Enable Notifications
@@ -1282,28 +1347,28 @@
           <nav class="bottom-nav">
             <a 
               class=${`bottom-nav-item ${activeTab === 'home' ? 'active' : ''}`}
-              onClick=${() => setActiveTab('home')}
+              onClick=${() => handleTabChange('home')}
             >
               <i data-feather="home" class="w-6 h-6 mb-1"></i>
               <span>Home</span>
             </a>
             <a 
               class=${`bottom-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick=${() => setActiveTab('settings')}
+              onClick=${() => handleTabChange('settings')}
             >
               <i data-feather="settings" class="w-6 h-6 mb-1"></i>
               <span>Settings</span>
             </a>
             <a 
               class=${`bottom-nav-item ${activeTab === 'notifications' ? 'active' : ''}`}
-              onClick=${() => setActiveTab('notifications')}
+              onClick=${() => handleTabChange('notifications')}
             >
               <i data-feather="bell" class="w-6 h-6 mb-1"></i>
               <span>Alerts</span>
             </a>
             <a 
               class=${`bottom-nav-item ${activeTab === 'info' ? 'active' : ''}`}
-              onClick=${() => setActiveTab('info')}
+              onClick=${() => handleTabChange('info')}
             >
               <i data-feather="info" class="w-6 h-6 mb-1"></i>
               <span>About</span>
