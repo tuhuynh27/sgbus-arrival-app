@@ -124,6 +124,7 @@
     }
 
     .bottom-nav-item {
+      cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -138,14 +139,9 @@
     }
 
     .bottom-nav-item.active {
-      color: hsl(var(--p));
-      background-color: hsl(var(--p) / 0.1);
-      font-weight: 600;
     }
 
     .bottom-nav-item.active i {
-      /* Make the icon slightly larger when active */
-      transform: scale(1.1);
     }
 
     /* Add smooth transition for icons */
