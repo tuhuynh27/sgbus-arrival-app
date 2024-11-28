@@ -1117,40 +1117,86 @@
                 <i data-feather="map-pin" class="mr-2 w-5 h-5"></i>${getStationDisplayName(stationId)}
               </h2>
               <div id="bus-arrival-times-${stationId}">
-                ${busArrivals[stationId] && busArrivals[stationId].length > 0 ? busArrivals[stationId].map(bus => {
-                  const remainingTimeMs = bus.arrivalTimestamp - currentTime;
-                  let timeString;
-                  if (remainingTimeMs > 0) {
-                    const totalSeconds = Math.floor(remainingTimeMs / 1000);
-                    const minutes = Math.floor(totalSeconds / 60);
-                    const seconds = totalSeconds % 60;
-                    timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                  } else {
-                    timeString = 'Arrived';
-                  }
+                ${busArrivals[stationId] && busArrivals[stationId].length > 0 ? html`
+                  <div class="grid grid-cols-1 gap-4">
+                    ${busArrivals[stationId].map(bus => {
+                      const remainingTimeMs = bus.arrivalTimestamp - currentTime;
+                      const totalSeconds = Math.floor(remainingTimeMs / 1000);
+                      const minutes = Math.floor(totalSeconds / 60);
+                      const seconds = totalSeconds % 60;
+                      
+                      // Calculate progress percentage (assuming 15 minutes max wait time)
+                      const progressPercent = Math.max(0, Math.min(100, (1 - (remainingTimeMs / (15 * 60 * 1000))) * 100));
+                      
+                      // Determine time status and color
+                      let timeStatus;
+                      let statusColor;
+                      if (remainingTimeMs <= 0) {
+                        timeStatus = 'Arriving';
+                        statusColor = 'text-success';
+                      } else if (minutes < 3) {
+                        timeStatus = 'Very Soon';
+                        statusColor = 'text-warning';
+                      } else {
+                        timeStatus = `${minutes} min`;
+                        statusColor = 'text-info';
+                      }
 
-                  const busRouteName = servicesData[bus.busNo]?.name || '';
-                  const truncatedRouteName = busRouteName.length > 30 ? busRouteName.slice(0, 30) + '...' : busRouteName;
+                      const busRouteName = servicesData[bus.busNo]?.name || '';
+                      const truncatedRouteName = busRouteName.length > 30 ? busRouteName.slice(0, 30) + '...' : busRouteName;
 
-                  return html`
-                    <div class="card mb-2 card-custom border border-base-300">
-                      <div class="card-body p-3">
-                        <div class="flex justify-between items-center">
-                          <div>
-                            <h5 class="card-title mb-0">${bus.busNo}</h5>
-                            ${truncatedRouteName && html`<p class="text-sm">${truncatedRouteName}</p>`}
-                          </div>
-                          <div class="flex items-center">
-                            <span class="text-sm mr-2">${timeString}</span>
-                            <button class="btn btn-ghost btn-sm p-0" onClick=${() => handleNotify(bus)}>
-                              <i data-feather="bell" class="w-5 h-5"></i>
-                            </button>
+                      return html`
+                        <div class="relative overflow-hidden rounded-lg bg-base-200 transition-all hover:scale-[1.02]">
+                          <div class="absolute bottom-0 left-0 h-1 bg-base-content/20" style="width: ${progressPercent}%"></div>
+                          
+                          <div class="flex items-center p-4">
+                            <!-- Bus Number Circle - using base-content for better contrast -->
+                            <div class="flex-shrink-0">
+                              <div class="w-16 h-16 rounded-full bg-base-content/10 flex items-center justify-center">
+                                <span class="text-xl font-bold text-base-content">${bus.busNo}</span>
+                              </div>
+                            </div>
+
+                            <!-- Middle Content -->
+                            <div class="flex-grow ml-4">
+                              <div class="text-sm opacity-70">${truncatedRouteName}</div>
+                              <div class="flex items-center mt-1">
+                                <i data-feather="clock" class="w-4 h-4 mr-1"></i>
+                                <span class="${remainingTimeMs <= 0 ? 'text-success' : 
+                                             minutes < 3 ? 'text-warning' : 
+                                             'text-base-content'} text-lg font-semibold">
+                                  ${timeStatus}
+                                </span>
+                                ${remainingTimeMs > 0 && minutes < 3 ? html`
+                                  <span class="ml-1 text-sm opacity-70">${seconds}s</span>
+                                ` : ''}
+                              </div>
+                            </div>
+
+                            <!-- Right Actions -->
+                            <div class="flex-shrink-0">
+                              <button 
+                                class="btn btn-circle btn-sm btn-ghost"
+                                onClick=${() => handleNotify(bus)}
+                                title="Set notification"
+                              >
+                                <i data-feather="bell" class="w-4 h-4"></i>
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      `;
+                    })}
+                  </div>
+                ` : html`
+                  <div class="text-center py-8">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-base-200 mb-4">
+                      <i data-feather="clock" class="w-8 h-8 opacity-50"></i>
                     </div>
-                  `;
-                }) : html`<p>No buses found for station ${stationId}</p>`}
+                    <p class="text-lg">No buses found for this stop</p>
+                    <p class="text-sm opacity-70">Check back later or try another stop</p>
+                  </div>
+                `}
               </div>
             </div>
           `)}
