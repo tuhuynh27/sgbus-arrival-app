@@ -3,8 +3,14 @@
     "short_name": "Bus Arrival",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#000000",
-    "theme_color": "#1D232A",
+    "theme_color": {
+        "light": "#ffffff",
+        "dark": "#1D232A"
+    },
+    "background_color": {
+        "light": "#ffffff",
+        "dark": "#1D232A"
+    },
     "icons": [
       {
         "src": "/bus.png",

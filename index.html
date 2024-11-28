@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <title>SG Bus Arrival</title>
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1D232A">
+  <meta name="theme-color" content="#1D232A" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <link rel="icon" href="/bus.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
@@ -473,14 +474,23 @@
         localStorage.setItem('theme', newTheme);
         document.querySelector('html').setAttribute('data-theme', newTheme);
 
+        // Update theme colors
         if (newTheme === 'light') {
           document.documentElement.style.setProperty('--card-bg-color', '#ffffff');
           document.documentElement.style.setProperty('--border-color', '#e5e7eb');
           document.documentElement.style.setProperty('--hover-bg-color', '#f3f4f6');
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff');
+          if ('setAppBadgeBackgroundColor' in navigator) {
+            navigator.setAppBadgeBackgroundColor('#ffffff');
+          }
         } else {
           document.documentElement.style.setProperty('--card-bg-color', '#1f2937');
           document.documentElement.style.setProperty('--border-color', '#374151');
           document.documentElement.style.setProperty('--hover-bg-color', '#4b5563');
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#1D232A');
+          if ('setAppBadgeBackgroundColor' in navigator) {
+            navigator.setAppBadgeBackgroundColor('#1D232A');
+          }
         }
       }
 
@@ -514,10 +524,18 @@
           document.documentElement.style.setProperty('--card-bg-color', '#ffffff');
           document.documentElement.style.setProperty('--border-color', '#e5e7eb');
           document.documentElement.style.setProperty('--hover-bg-color', '#f3f4f6');
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff');
+          if ('setAppBadgeBackgroundColor' in navigator) {
+            navigator.setAppBadgeBackgroundColor('#ffffff');
+          }
         } else {
           document.documentElement.style.setProperty('--card-bg-color', '#1f2937');
           document.documentElement.style.setProperty('--border-color', '#374151');
           document.documentElement.style.setProperty('--hover-bg-color', '#4b5563');
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#1D232A');
+          if ('setAppBadgeBackgroundColor' in navigator) {
+            navigator.setAppBadgeBackgroundColor('#1D232A');
+          }
         }
       }, [theme]);
 
