@@ -64,6 +64,33 @@
     .input {
       border-color: transparent;
     }
+    .loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #1D232A; /* or your preferred color */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      color: white;
+      font-size: 2em;
+      overflow: hidden; /* Prevent scrolling */
+      opacity: 0;
+      animation: fadeIn 0.2s forwards, fadeOut 0.2s 1s forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes fadeOut {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
   </style>
   <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
@@ -77,6 +104,9 @@
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 </head>
 <body class="bg-base-100 min-h-screen flex flex-col">
+  <div class="loading-screen" id="loading-screen">
+    <i data-feather="heart" class="mr-2"></i> SG Bus Arrival
+  </div>
   <div id="toast-container" class="toast toast-top toast-center"></div>
 
   <div id="app" class="flex-grow"></div>
@@ -143,6 +173,16 @@
         console.error('Error in initializePush:', error);
       }
     }
+
+    // Hide the loading screen after 2 seconds
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const loadingScreen = document.getElementById('loading-screen');
+        if (loadingScreen) {
+          loadingScreen.style.display = 'none';
+        }
+      }, 1000);
+    });
   </script>
 
   <script>
