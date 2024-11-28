@@ -1130,16 +1130,13 @@
                       
                       // Determine time status and color
                       let timeStatus;
-                      let statusColor;
-                      if (remainingTimeMs <= 0) {
+                      const statusColor = 'text-info';
+                      if (remainingTimeMs <= 30_000) {
                         timeStatus = 'Arriving';
-                        statusColor = 'text-success';
                       } else if (minutes < 3) {
                         timeStatus = 'Very Soon';
-                        statusColor = 'text-warning';
                       } else {
                         timeStatus = `${minutes} min`;
-                        statusColor = 'text-info';
                       }
 
                       const busRouteName = servicesData[bus.busNo]?.name || '';
@@ -1162,9 +1159,7 @@
                               <div class="text-sm opacity-70">${truncatedRouteName}</div>
                               <div class="flex items-center mt-1">
                                 <i data-feather="clock" class="w-4 h-4 mr-1"></i>
-                                <span class="${remainingTimeMs <= 0 ? 'text-success' : 
-                                             minutes < 3 ? 'text-warning' : 
-                                             'text-base-content'} text-lg font-semibold">
+                                <span class="text-base-content text-lg font-semibold">
                                   ${timeStatus}
                                 </span>
                                 ${remainingTimeMs > 0 && minutes < 3 ? html`
