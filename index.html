@@ -384,9 +384,17 @@
       }
 
       function getBusArrivals() {
+        // Change timeout to 5 seconds
+        const fetchTimeout = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Fetch timeout')), 5000);
+        });
+
         setIsLoading(true);
         let fetchPromises = stationConfigs.map(({ stationId, busNumbers }) => {
-          return fetch(`https://arrivelah2.busrouter.sg/?id=${stationId}`)
+          return Promise.race([
+            fetch(`https://arrivelah2.busrouter.sg/?id=${stationId}`),
+            fetchTimeout
+          ])
             .then(response => response.json())
             .then(data => {
               const buses = data.services;
@@ -438,7 +446,11 @@
           .catch(error => {
             console.error('Error fetching bus arrivals:', error);
             setError('Failed to fetch bus arrivals');
-            showToast('Failed to fetch bus arrivals', 'error');
+            showToast('Failed to fetch bus arrivals. Retrying...', 'error');
+            // Auto retry after 1 second
+            setTimeout(() => {
+              getBusArrivals();
+            }, 1000);
           })
           .finally(() => {
             setIsLoading(false);
@@ -512,16 +524,35 @@
 
         const handleVisibilityChange = () => {
           if (document.visibilityState === 'visible') {
-            getBusArrivals();
+            // Reset loading and error states before fetching
+            setIsLoading(true);
+            setError(null);
+            // Add a small delay to ensure the app has fully resumed
+            setTimeout(() => {
+              getBusArrivals();
+            }, 100);
           }
         };
 
+        // Add a focus event listener specifically for iOS
+        const handleFocus = () => {
+          // Reset loading and error states before fetching
+          setIsLoading(true);
+          setError(null);
+          // Add a small delay to ensure the app has fully resumed
+          setTimeout(() => {
+            getBusArrivals();
+          }, 100);
+        };
+
         document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
 
         return () => {
           clearInterval(interval);
           clearInterval(timer);
           document.removeEventListener('visibilitychange', handleVisibilityChange);
+          window.removeEventListener('focus', handleFocus);
         };
       }, [stationConfigs]);
 
