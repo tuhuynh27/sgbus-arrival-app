@@ -173,12 +173,14 @@
       transition: transform 0.2s ease-out, opacity 0.2s ease-out;
       visibility: hidden;
       -webkit-overflow-scrolling: touch;
+      pointer-events: none;
     }
 
     .tab-page.active {
       opacity: 1;
       transform: translateX(0);
       visibility: visible;
+      pointer-events: auto;
     }
 
     .tab-page.slide-left {
@@ -1069,6 +1071,11 @@
       }, []);
 
       function handleTabChange(newTab) {
+        // Don't do anything if clicking the same tab
+        if (newTab === activeTab) {
+          return;
+        }
+
         const tabOrder = ['home', 'settings', 'notifications', 'info'];
         const currentIndex = tabOrder.indexOf(activeTab);
         const newIndex = tabOrder.indexOf(newTab);
@@ -1105,7 +1112,7 @@
             class=${`tab-page ${
               activeTab === 'home' ? 'active' : ''
             } ${
-              previousTab === 'home' ? 'previous' : ''
+              previousTab === 'home' && activeTab !== 'home' ? 'previous' : ''
             } ${
               slideDirection && activeTab !== 'home' ? `slide-${slideDirection === 'right' ? 'left' : 'right'}` : ''
             }`}
@@ -1256,7 +1263,7 @@
             class=${`tab-page ${
               activeTab === 'settings' ? 'active' : ''
             } ${
-              previousTab === 'settings' ? 'previous' : ''
+              previousTab === 'settings' && activeTab !== 'settings' ? 'previous' : ''
             } ${
               slideDirection && activeTab !== 'settings' ? `slide-${slideDirection === 'right' ? 'left' : 'right'}` : ''
             }`}
@@ -1378,7 +1385,7 @@
             class=${`tab-page ${
               activeTab === 'info' ? 'active' : ''
             } ${
-              previousTab === 'info' ? 'previous' : ''
+              previousTab === 'info' && activeTab !== 'info' ? 'previous' : ''
             } ${
               slideDirection && activeTab !== 'info' ? `slide-${slideDirection === 'right' ? 'left' : 'right'}` : ''
             }`}
@@ -1402,7 +1409,7 @@
             class=${`tab-page ${
               activeTab === 'notifications' ? 'active' : ''
             } ${
-              previousTab === 'notifications' ? 'previous' : ''
+              previousTab === 'notifications' && activeTab !== 'notifications' ? 'previous' : ''
             } ${
               slideDirection && activeTab !== 'notifications' ? `slide-${slideDirection === 'right' ? 'left' : 'right'}` : ''
             }`}
