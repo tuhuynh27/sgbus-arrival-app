@@ -13,7 +13,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@intelight/geolib@2.0.22/dist/geolib.min.js"></script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   
   <style>
     .config-toggle {
@@ -96,13 +96,14 @@
     .bottom-nav {
       position: fixed;
       bottom: 0;
-      left: 50%; /* Center the nav */
-      transform: translateX(-50%); /* Center the nav */
+      left: 50%;
+      transform: translateX(-50%);
       width: 100%;
-      max-width: 480px; /* Match container max-width */
+      max-width: 480px;
       background-color: var(--card-bg-color);
       border-top: 1px solid var(--border-color);
       padding: 0.5rem;
+      padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
       display: flex;
       justify-content: space-around;
       z-index: 50;
@@ -153,18 +154,18 @@
     }
 
     .page-container {
-      padding-bottom: 5rem; /* Add space for bottom nav */
-      height: 100vh; /* Full viewport height */
-      position: relative; /* For absolute positioning of bottom nav */
-      overflow: hidden; /* Prevent scrolling on container */
+      padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+      height: 100vh;
+      position: relative;
+      overflow: hidden;
     }
 
     .tab-page {
-      height: calc(100vh - 5rem); /* Full height minus bottom nav */
+      height: calc(100vh - 5rem - env(safe-area-inset-bottom));
       padding: 1rem;
       display: none;
-      overflow-y: auto; /* Allow scrolling within tabs */
-      padding-bottom: env(safe-area-inset-bottom); /* iOS safe area */
+      overflow-y: auto;
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom));
     }
 
     .tab-page.active {
