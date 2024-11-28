@@ -96,8 +96,10 @@
     .bottom-nav {
       position: fixed;
       bottom: 0;
-      left: 0;
-      right: 0;
+      left: 50%; /* Center the nav */
+      transform: translateX(-50%); /* Center the nav */
+      width: 100%;
+      max-width: 480px; /* Match container max-width */
       background-color: var(--card-bg-color);
       border-top: 1px solid var(--border-color);
       padding: 0.5rem;
@@ -106,6 +108,18 @@
       z-index: 50;
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
+    }
+
+    /* Add a full-width background behind the nav */
+    .bottom-nav::before {
+      content: '';
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 100%;
+      background-color: var(--card-bg-color);
+      z-index: -1;
     }
 
     .bottom-nav-item {
@@ -188,7 +202,9 @@
   </div>
   <div id="toast-container" class="toast toast-top toast-center"></div>
 
-  <div id="app"></div>
+  <div class="mx-auto w-full max-w-[480px] relative">
+    <div id="app"></div>
+  </div>
 
   <script src="https://unpkg.com/preact@latest/dist/preact.min.js"></script>
   <script src="https://unpkg.com/preact@latest/hooks/dist/hooks.umd.js"></script>
