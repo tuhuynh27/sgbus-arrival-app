@@ -342,16 +342,6 @@
         console.error('Error in initializePush:', error);
       }
     }
-
-    // Hide the loading screen after 2 seconds
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        const loadingScreen = document.getElementById('loading-screen');
-        if (loadingScreen) {
-          loadingScreen.style.display = 'none';
-        }
-      }, 1000);
-    });
   </script>
 
   <script>
@@ -406,6 +396,13 @@
       const [activeTab, setActiveTab] = useState('home');
       const [previousTab, setPreviousTab] = useState(null);
       const [slideDirection, setSlideDirection] = useState(null);
+
+      useEffect(() => {
+        const loadingScreen = document.getElementById('loading-screen');
+        if (loadingScreen) {
+          loadingScreen.style.display = 'none';
+        }
+      }, []);
 
       function toggleConfigModal() {
         setIsConfigModalOpen(!isConfigModalOpen);
