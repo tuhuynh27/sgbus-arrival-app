@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sg-bus-arrival-v1';
+const CACHE_NAME = 'sg-bus-arrival-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -57,31 +57,52 @@ self.addEventListener('fetch', event => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
 
-  // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin) && 
-      !STATIC_ASSETS.includes(event.request.url)) {
+  // Handle API calls - no caching
+  if (event.request.url.includes('/api/')) {
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response; // Return cached version
-        }
-        return fetch(event.request).then(response => {
-          // Cache important resources that weren't in STATIC_ASSETS
-          if (response.status === 200 && 
-              (event.request.url.endsWith('.js') || 
-               event.request.url.endsWith('.css') || 
-               event.request.url.endsWith('.json'))) {
+  // For static assets in our predefined list, use cache-first
+  if (STATIC_ASSETS.includes(event.request.url)) {
+    event.respondWith(
+      caches.match(event.request)
+        .then(response => {
+          return response || fetch(event.request).then(response => {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then(cache => {
               cache.put(event.request, responseClone);
             });
-          }
+            return response;
+          });
+        })
+    );
+    return;
+  }
+
+  // For other requests, use network-first strategy
+  event.respondWith(
+    fetch(event.request)
+      .then(response => {
+        // Only cache successful responses
+        if (!response || response.status !== 200) {
           return response;
-        });
+        }
+
+        // Cache if it's a static resource
+        if (response.headers.get('content-type')?.includes('text/css') ||
+            response.headers.get('content-type')?.includes('application/javascript') ||
+            response.headers.get('content-type')?.includes('image/') ||
+            response.headers.get('content-type')?.includes('font/')) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseClone);
+          });
+        }
+        return response;
+      })
+      .catch(() => {
+        // If network fails, try to get from cache
+        return caches.match(event.request);
       })
   );
 });
